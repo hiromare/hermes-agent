@@ -470,6 +470,17 @@ def create_task(payload: CreateTaskBody, board: Optional[str] = Query(None)):
         return body
 
 
+@router.get("/activity")
+def get_activity(board: str = Query(..., min_length=1),
+                 limit: str = Query("20", pattern=r"^(?:[1-9]|[1-4][0-9]|50)$")):
+    from hermes_cli.kanban_activity_feed import activity
+
+    if not board.strip():
+        raise HTTPException(status_code=400, detail="board is required")
+    with _board_conn(board) as (resolved, conn):
+        return {"board": resolved, "activity": activity(conn, resolved, int(limit))}
+
+
 # Explicit long-running work only; the receipt and task commit together on this board.
 class DelegatedTaskBody(BaseModel):
     request_id: UUID

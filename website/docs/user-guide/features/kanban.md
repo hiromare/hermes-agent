@@ -1472,3 +1472,11 @@ Every transition appends a row to `task_events`. Each row carries an optional `r
 ## Out of scope
 
 Kanban is deliberately single-host. `~/.hermes/kanban.db` is a local SQLite file and the dispatcher spawns workers on the same machine. Running a shared board across two hosts is not supported — there's no coordination primitive for "worker X on host A, worker Y on host B," and the crash-detection path assumes PIDs are host-local. If you need multi-host, run an independent board per host and use `delegate_task` / a message queue to bridge them.
+# Activity projection API
+
+The authenticated dashboard endpoint `GET /api/plugins/kanban/activity?board=<slug>&limit=<1..50>`
+returns a newest-first, board-scoped projection of `completed` and `gave_up` task events (default
+limit 20). Each entry includes the event ID, kind and timestamp, plus the linked task's current
+title, status and result. Events for deleted tasks are excluded; an event describes a past transition,
+so the current task status can differ. This query does not establish external verification, persist
+read or notification state, or deliver notifications. Action Requests have their own API.
