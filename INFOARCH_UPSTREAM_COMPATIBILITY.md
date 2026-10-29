@@ -34,6 +34,7 @@ On 2026-10-30 JST, the public origin `https://github.com/NousResearch/hermes-age
       tests/hermes_cli/test_session_provenance_adapter.py
       tests/hermes_cli/test_kanban_mobile_journey_contract.py
       tests/hermes_cli/test_kanban_delegate_client.py
+      tests/hermes_cli/test_kanban_delegated_dispatch_contract.py
    ```
    Also run the full repository tests on a compatible Linux CI host; targeted Mac tests do not substitute for the full regression suite.
 4. From Mobile, run its `:app:testDebugUnitTest`, `:app:assembleDebug` and matching `ktlint 1.8.0` checks. Verify optional provenance decode, search-to-history conversion, legacy source filtering, receipt status/error handling, worker session paging and profile scoping.
