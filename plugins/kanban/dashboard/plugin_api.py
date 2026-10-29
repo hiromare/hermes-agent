@@ -501,6 +501,31 @@ def delegate_task(payload: DelegatedTaskBody, board: str = Query(..., min_length
                 "board": resolved, "task_url": f"/api/plugins/kanban/tasks/{quote(task.id, safe='')}?board={quote(resolved, safe='')}"}
 
 
+@router.get("/delegations/{request_id}")
+def get_delegation(request_id: str, board: str = Query(..., min_length=1)):
+    from hermes_cli import kanban_delegation
+
+    if not board.strip():
+        raise HTTPException(status_code=400, detail="board is required")
+    try:
+        request_id = str(UUID(request_id))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="invalid request_id") from exc
+    with _board_conn(board) as (resolved, conn):
+        try:
+            task = kanban_delegation.lookup(conn, request_id)
+        except kanban_delegation.DelegationTaskMissing as exc:
+            raise HTTPException(status_code=410, detail=str(exc)) from exc
+        if task is None:
+            raise HTTPException(status_code=404, detail="delegation not found")
+        event = conn.execute("SELECT MAX(created_at) FROM task_events WHERE task_id=?", (task.id,)).fetchone()[0]
+        activity = max((v for v in (task.created_at, task.started_at, task.completed_at,
+                                    task.last_heartbeat_at, event) if v is not None), default=None)
+        return {"request_id": str(request_id), "task_id": task.id, "board": resolved,
+                "status": task.status, "last_activity_at": activity, "result": task.result,
+                "task_url": f"/api/plugins/kanban/tasks/{quote(task.id, safe='')}?board={quote(resolved, safe='')}"}
+
+
 # --- Attachments — upload / list / download / delete ------------------------
 # Size cap, filename sanitiser, and collision resolver live in ``kanban_db`` so the
 # dashboard, agent toolset, and CLI share one implementation.

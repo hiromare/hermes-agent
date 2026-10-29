@@ -15,6 +15,19 @@ class DelegationTaskMissing(ValueError):
     pass
 
 
+def lookup(conn, request_id):
+    # Boards that have never accepted a delegation have no receipt table yet.
+    if not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='delegation_receipts'").fetchone():
+        return None
+    receipt = conn.execute("SELECT task_id FROM delegation_receipts WHERE request_id=?", (request_id,)).fetchone()
+    if receipt is None:
+        return None
+    task = kanban_db.get_task(conn, receipt["task_id"])
+    if task is None:
+        raise DelegationTaskMissing("the original task no longer exists")
+    return task
+
+
 def submit(conn, *, board, request_id, origin, title, body, assignee):
     payload = {"origin": origin, "title": title, "body": body, "assignee": assignee}
     digest = hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False,

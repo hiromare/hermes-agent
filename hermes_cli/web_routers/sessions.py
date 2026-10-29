@@ -226,7 +226,9 @@ def get_sessions(
             total = db.session_count(exclude_children=True, **scope)
             now = time.time()
             row_profile = profile_name or _cron_default_profile()
+            from hermes_cli.session_provenance import session_provenance
             for s in sessions:
+                s["provenance"] = session_provenance(db, s["id"])
                 s["is_active"] = _is_active(s, now)
                 s["profile"] = row_profile
                 s["is_default_profile"] = row_profile == "default"
@@ -363,6 +365,8 @@ async def search_sessions(
                 payload = dict(payload)
                 sid = lineage_tip(raw_sid)
                 payload["session_id"] = sid
+                from hermes_cli.session_provenance import session_provenance
+                payload["provenance"] = session_provenance(db, sid)
                 payload["lineage_root"] = root
                 payload["profile"] = row_profile
                 payload["is_default_profile"] = row_profile == "default"
@@ -564,6 +568,8 @@ async def get_session_detail(session_id: str, profile: Optional[str] = None):
         session = db.get_session(sid) if sid else None
         if not session:
             raise HTTPException(status_code=404, detail=_NOT_FOUND)
+        from hermes_cli.session_provenance import session_provenance
+        session["provenance"] = session_provenance(db, sid)
         # Always stamp the owner: unowned default-profile rows made multi-profile
         # clients resolve them to whichever gateway happened to be active.
         session["profile"] = _serving_profile(profile)

@@ -1,6 +1,7 @@
 """The delegated-work receipt is durable, atomic, and board scoped."""
 import importlib.util
 import sys
+import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from uuid import uuid4
@@ -40,6 +41,8 @@ def test_atomic_retries_conflict_and_live_status(client):
     assert len({r["task_id"] for r in results}) == 1
     assert sum(r["created"] for r in results) == 1
     task_id = results[0]["task_id"]
+    lookup = f'/api/plugins/kanban/delegations/{payload["request_id"]}?board=default'
+    assert client.get(lookup).json()["task_id"] == task_id
     assert client.post(url, json={**payload, "body": "different"}).status_code == 409
     with kbc.connect_closing(board="default") as conn:
         assert conn.execute("SELECT count(*) FROM tasks").fetchone()[0] == 1
@@ -49,10 +52,22 @@ def test_atomic_retries_conflict_and_live_status(client):
     assert retry["task_id"] == task_id and retry["status"] == "done" and not retry["created"]
     detail = client.get(retry["task_url"])
     assert detail.status_code == 200 and detail.json()["task"]["result"] == "finished"
+    found = client.get(lookup).json()
+    assert found["status"] == "done" and found["result"] == "finished"
+    assert found["last_activity_at"] is not None
+    with kbc.connect_closing(board="default") as conn:
+        db_path = conn.execute("PRAGMA database_list").fetchone()[2]
+    script = ("import sqlite3,sys; from hermes_cli.kanban_delegation import lookup; "
+              "c=sqlite3.connect(sys.argv[1]); c.row_factory=sqlite3.Row; "
+              "print(lookup(c,sys.argv[2]).status)")
+    child = subprocess.run([sys.executable, "-c", script, db_path, payload["request_id"]],
+                           capture_output=True, text=True, check=True)
+    assert child.stdout.strip() == "done"
     with kbc.connect_closing(board="default") as conn:
         conn.execute("DELETE FROM tasks WHERE id=?", (task_id,))
         conn.commit()
     assert client.post(url, json=payload).status_code == 410
+    assert client.get(lookup).status_code == 410
 
 
 def test_requires_explicit_board_and_valid_payload(client):
@@ -61,6 +76,10 @@ def test_requires_explicit_board_and_valid_payload(client):
     assert client.post("/api/plugins/kanban/delegations?board=%20", json=payload).status_code == 400
     assert client.post("/api/plugins/kanban/delegations?board=missing", json=payload).status_code == 404
     assert client.post("/api/plugins/kanban/delegations?board=default", json={**payload, "secret": "no"}).status_code == 422
+    assert client.get(f'/api/plugins/kanban/delegations/{payload["request_id"]}?board=default').status_code == 404
+    invalid = client.get('/api/plugins/kanban/delegations/not-a-uuid-secret?board=default')
+    assert invalid.status_code == 400 and 'secret' not in invalid.text
+    assert client.get(f'/api/plugins/kanban/delegations/{payload["request_id"]}').status_code == 422
 
 
 def test_same_request_id_is_scoped_to_the_explicit_board(client):
@@ -69,6 +88,7 @@ def test_same_request_id_is_scoped_to_the_explicit_board(client):
     create_board("other")
     payload = {"request_id": str(uuid4()), "origin": "chatgpt", "title": "Work"}
     first = client.post("/api/plugins/kanban/delegations?board=default", json=payload)
+    assert client.get(f'/api/plugins/kanban/delegations/{payload["request_id"]}?board=other').status_code == 404
     second = client.post("/api/plugins/kanban/delegations?board=other", json=payload)
     assert first.status_code == second.status_code == 200
     assert first.json()["task_id"] != second.json()["task_id"]

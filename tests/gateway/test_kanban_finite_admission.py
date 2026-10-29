@@ -129,6 +129,11 @@ def test_durable_kanban_admission_preserves_headless_policy_in_worker(kanban_own
             retry = await run_task(owner.connection, owner.params)
             assert retry == first
             sid = first['session_id']
+            from hermes_cli.session_provenance import session_provenance
+            assert session_provenance(authority.db, sid) == {
+                'origin': 'kanban', 'purpose': 'worker', 'board': 'owned',
+                'task_id': owner.params['task_id'], 'run_id': owner.params['run_id'],
+                'evidence': 'validated_creation_claim'}
             from hermes_cli import kanban_db as kb
             from hermes_cli.kanban_db_connect import connect
             with closing(connect(board='owned')) as conn:
