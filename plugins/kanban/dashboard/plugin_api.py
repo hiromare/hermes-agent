@@ -21,7 +21,8 @@ from contextlib import closing, contextmanager
 from dataclasses import asdict
 from functools import partial
 from pathlib import Path
-from typing import Any, Callable, Iterator, Optional
+from typing import Any, Callable, Iterator, Literal, Optional
+from uuid import UUID
 from urllib.parse import quote
 
 from fastapi import (
@@ -467,6 +468,37 @@ def create_task(payload: CreateTaskBody, board: Optional[str] = Query(None)):
             except Exception:
                 pass  # probe failure must never block the create itself
         return body
+
+
+# Explicit long-running work only; the receipt and task commit together on this board.
+class DelegatedTaskBody(BaseModel):
+    request_id: UUID
+    origin: Literal["chatgpt", "external_client"]
+    title: str = Field(min_length=1, max_length=500)
+    body: Optional[str] = Field(default=None, max_length=20000)
+    assignee: Optional[str] = Field(default=None, max_length=200)
+
+    model_config = {"extra": "forbid"}
+
+
+@router.post("/delegations")
+def delegate_task(payload: DelegatedTaskBody, board: str = Query(..., min_length=1)):
+    from hermes_cli import kanban_delegation
+
+    if not board.strip():
+        raise HTTPException(status_code=400, detail="board is required")
+    with _board_conn(board) as (resolved, conn), _value_error_400():
+        try:
+            task, created = kanban_delegation.submit(
+                conn, board=resolved, request_id=str(payload.request_id), origin=payload.origin,
+                title=payload.title, body=payload.body, assignee=payload.assignee,
+            )
+        except kanban_delegation.DelegationConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except kanban_delegation.DelegationTaskMissing as exc:
+            raise HTTPException(status_code=410, detail=str(exc)) from exc
+        return {"task_id": task.id, "status": task.status, "created": created,
+                "board": resolved, "task_url": f"/api/plugins/kanban/tasks/{quote(task.id, safe='')}?board={quote(resolved, safe='')}"}
 
 
 # --- Attachments — upload / list / download / delete ------------------------

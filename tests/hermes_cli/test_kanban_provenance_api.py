@@ -48,3 +48,16 @@ def test_run_session_link_and_missing_history_use_dashboard_auth(monkeypatch, _i
     assert historical["worker_session_id"] is None
     assert historical["worker_session_url"] is None
     assert client.get("/api/plugins/kanban/runs/99999999").status_code == 404
+
+
+def test_delegation_route_uses_dashboard_auth(_isolate_hermes_home):
+    from hermes_cli.web_server import app, _SESSION_HEADER_NAME, _SESSION_TOKEN
+
+    client = TestClient(app)
+    url = "/api/plugins/kanban/delegations?board=default"
+    payload = {"request_id": "7f00b3a2-6485-4fd4-b0a0-cd85f21d4f2b", "origin": "chatgpt", "title": "Work"}
+    assert client.post(url, json=payload).status_code == 401
+    client.headers[_SESSION_HEADER_NAME] = _SESSION_TOKEN
+    created = client.post(url, json=payload)
+    assert created.status_code == 200, created.text
+    assert client.get(created.json()["task_url"]).status_code == 200
