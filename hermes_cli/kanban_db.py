@@ -279,13 +279,9 @@ def _fire_dispatch_tick_hook(
 # ``heartbeat_claim`` or raise it via HERMES_KANBAN_CLAIM_TTL_SECONDS.
 DEFAULT_CLAIM_TTL_SECONDS = 15 * 60
 
-# A live PID with a heartbeat older than this is wedged and reclaimed anyway
-# (``_touch_activity`` keeps genuinely active workers fresh).
-# If a worker's PID is still alive but its ``last_heartbeat_at`` is older than this when
-# ``release_stale_claims`` runs, treat the worker as wedged and reclaim regardless of PID liveness (#29747
-# gap 3). This catches the logic-loop case where the process is technically running but not making
-# observable progress. ``_touch_activity`` bridges chunk-level liveness into ``last_heartbeat_at`` via
-# #31752, so any genuinely active worker keeps its heartbeat fresh as a side effect of normal API traffic.
+# Reclaim even a live PID when its heartbeat is stale, catching wedged logic loops (#29747 gap 3).
+# ``_touch_activity`` refreshes ``last_heartbeat_at`` on chunk-level activity (#31752),
+# so genuinely active workers keep their heartbeat fresh during normal API traffic.
 DEFAULT_CLAIM_HEARTBEAT_MAX_STALE_SECONDS = 60 * 60
 
 # Grace when a host-local worker survived termination (e.g. parked in D state
