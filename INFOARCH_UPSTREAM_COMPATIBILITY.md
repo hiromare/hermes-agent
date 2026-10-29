@@ -33,11 +33,18 @@ On 2026-10-30 JST, the public origin `https://github.com/NousResearch/hermes-age
       tests/hermes_cli/test_kanban_activity_api.py \
       tests/hermes_cli/test_session_provenance_adapter.py
       tests/hermes_cli/test_kanban_mobile_journey_contract.py
+      tests/hermes_cli/test_kanban_delegate_client.py
    ```
    Also run the full repository tests on a compatible Linux CI host; targeted Mac tests do not substitute for the full regression suite.
 4. From Mobile, run its `:app:testDebugUnitTest`, `:app:assembleDebug` and matching `ktlint 1.8.0` checks. Verify optional provenance decode, search-to-history conversion, legacy source filtering, receipt status/error handling, worker session paging and profile scoping.
 5. Run a **real authenticated integration test** from the Mobile network context before deploying: board-specific POST delegation (same UUID retry), GET receipt, Kanban run → profile-scoped session, finish/failure event → notice → same task, disconnection/reconnect and account/profile isolation. No request UUID reuse on another payload.
 6. Validate G0–G5 non-regression gates against 2026-10-15 Mobile UX contract. Do not call full E2E complete based on unit tests or an emulator without backend credentials.
+
+## Local ChatGPT/Work bridge
+
+The additive `scripts/kanban_delegate_client.py` calls the canonical authenticated delegation POST/GET via the connected Mac. Set `HERMES_BASE_URL` and `HERMES_SESSION_TOKEN` privately; never pass credentials as CLI arguments. Retain and reuse board, UUID, and identical payload on lost responses. The bridge requires HTTPS for non-loopback connections and does not install a native ChatGPT connector.
+
+Android opt-in real HTTP test `KanbanLiveBackendContractTest` only accepts an isolated loopback `127.0.0.1:19473` via adb reverse. It creates and completes SCRATCH tasks; never point it at production.
 
 ## Deferred/non-goals
 
