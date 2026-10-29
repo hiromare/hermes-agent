@@ -32,6 +32,7 @@ On 2026-10-30 JST, the public origin `https://github.com/NousResearch/hermes-age
       tests/hermes_cli/test_kanban_provenance_migration.py \
       tests/hermes_cli/test_kanban_activity_api.py \
       tests/hermes_cli/test_session_provenance_adapter.py
+      tests/hermes_cli/test_kanban_mobile_journey_contract.py
    ```
    Also run the full repository tests on a compatible Linux CI host; targeted Mac tests do not substitute for the full regression suite.
 4. From Mobile, run its `:app:testDebugUnitTest`, `:app:assembleDebug` and matching `ktlint 1.8.0` checks. Verify optional provenance decode, search-to-history conversion, legacy source filtering, receipt status/error handling, worker session paging and profile scoping.
@@ -43,4 +44,5 @@ On 2026-10-30 JST, the public origin `https://github.com/NousResearch/hermes-age
 - ChatGPT connector action that exposes the delegated POST/GET flow is still missing; existing connector chat does not equal the new Kanban API.
 - Production update, GitHub push/main merge, physical Flip7 install and Proxmox changes are not approved as part of this branch work.
 - Desktop transcript WIP is **stashed**, not merged or active; revisit after Mobile UX acceptance.
+- The local HTTP journey contract test intentionally simulates a verified owner admission and a Kanban completion inside a fresh isolated test home. It verifies actual authenticated route shapes and cross-route identity, **not** the real dispatcher/Gateway worker lifecycle or a network-connected Android device.
 - A remote Hermes version newer than the reference commit must pass this gate again. Future upstream compatibility cannot be guaranteed indefinitely by passing today's tests.
