@@ -698,6 +698,7 @@ class Run:
     summary: Optional[str]
     metadata: Optional[dict]
     error: Optional[str]
+    worker_session_id: Optional[str] = None
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> Run:
@@ -711,6 +712,7 @@ class Run:
             **{col: _to_epoch(row[col]) for col in ("claim_expires", "last_heartbeat_at", "ended_at")},
             id=int(row["id"]), started_at=_to_epoch(row["started_at"]) or 0,
             metadata=_json_or(_lossy_text(row["metadata"])),
+            worker_session_id=_row_get(row, "worker_session_id"),
         )
 
 
@@ -930,7 +932,8 @@ CREATE TABLE IF NOT EXISTS task_runs (
     --          gave_up | reclaimed | (null while still running)
     summary             TEXT,
     metadata            TEXT,
-    error               TEXT
+    error               TEXT,
+    worker_session_id   TEXT
 );
 
 -- Files attached to a task (PDFs, images, source documents). The blob

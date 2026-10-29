@@ -22,6 +22,7 @@ from dataclasses import asdict
 from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Iterator, Optional
+from urllib.parse import quote
 
 from fastapi import (
     APIRouter, File, Form, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect, status as http_status)
@@ -134,6 +135,17 @@ def _require_task(conn: sqlite3.Connection, task_id: str) -> kanban_db.Task:
 
 def _require_run(conn: sqlite3.Connection, run_id: int) -> kanban_db.Run:
     return _require(kanban_db.get_run, conn, run_id, "run")
+
+
+def _run_dict(run: kanban_db.Run) -> dict[str, Any]:
+    result = asdict(run)
+    # The existing session-detail route resolves the owning profile. A missing
+    # link remains null; legacy metadata is not proof that the owner admitted it.
+    result["worker_session_url"] = (
+        f"/api/sessions/{quote(run.worker_session_id, safe='')}?profile={quote(run.profile, safe='')}"
+        if run.worker_session_id and run.profile else None
+    )
+    return result
 
 
 def _require_ok(ok: bool) -> None:
@@ -406,7 +418,7 @@ def get_task(
             "child_results": [
                 {"id": c.id, "title": c.title, "status": c.status, "latest_summary": child_summaries.get(c.id), "result": c.result}
                 for c in children],
-            "runs": [asdict(r) for r in kanban_db.list_runs(conn, task_id, state_type=run_state_type, state_name=run_state_name)]}
+            "runs": [_run_dict(r) for r in kanban_db.list_runs(conn, task_id, state_type=run_state_type, state_name=run_state_name)]}
 
 
 # --- POST /tasks ------------------------------------------------------------
@@ -937,7 +949,7 @@ def list_active_workers(board: Optional[str] = _BOARD_Q):
 def get_run_endpoint(run_id: int, board: Optional[str] = _BOARD_Q):
     """``{run: {...}}`` with the same serialisation as ``GET /tasks/{id}``; 404 if unknown."""
     with _board_conn(board) as (board, conn):
-        return {"run": asdict(_require_run(conn, run_id))}
+        return {"run": _run_dict(_require_run(conn, run_id))}
 
 
 @router.get("/runs/{run_id}/inspect")

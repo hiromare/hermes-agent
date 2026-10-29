@@ -70,6 +70,20 @@ def build_kanban_policy(connection, params, config):
                    request_json=json.dumps(request, sort_keys=True), kanban_json=json.dumps(context)), private
 
 
+def _link_worker_session(conn, params, session_id, *, admitted):
+    """Persist the admitted owner's session on exactly one run, including retries."""
+    try:
+        linked = conn.execute(
+            'UPDATE task_runs SET worker_session_id=? '
+            'WHERE id=? AND task_id=? AND (claim_lock=? OR ?) '
+            'AND (worker_session_id IS NULL OR worker_session_id=?)',
+            (session_id, params['run_id'], params['task_id'], params['claim_lock'], admitted, session_id))
+    except sqlite3.IntegrityError as exc:
+        raise RuntimeStoreError('stale_kanban_claim') from exc
+    if linked.rowcount != 1:
+        raise RuntimeStoreError('stale_kanban_claim')
+
+
 async def run_task(connection, params):
     if not connection.native_owner or 'session:create' not in connection.actor.capabilities:
         raise RuntimeStoreError('permission_denied')
@@ -128,6 +142,10 @@ async def run_task(connection, params):
                     {'db': owner_db, 'session_id': ref.session_id,
                      'request_id': request_id, 'pid': os.getpid(), 'birth': worker_birth(psutil.Process())},
                     run_id=task.current_run_id)
+            # The owner has proved the exact claim (or recovered its durable admission).
+            # Keep the link on the run row: completion replaces metadata and a submitter
+            # may die before it can write any result. A retry may repeat only this link.
+            _link_worker_session(conn, params, ref.session_id, admitted=bool(marker))
     from gateway.session_runtime_workers import tracked_write
     await tracked_write(authority, admit_claim)
     await connection.resume(ref, {})

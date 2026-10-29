@@ -904,6 +904,7 @@ _TASK_RUN_COLUMNS = (
     # Spawn-time start fingerprint of the run's worker_pid (PID-reuse guard for the
     # terminal-worker reaper; NULL = legacy row, never signalled).
     ("worker_started_at", "worker_started_at INTEGER"),
+    ("worker_session_id", "worker_session_id TEXT"),
 )
 
 
@@ -982,6 +983,8 @@ def _migrate_add_optional_columns(conn: sqlite3.Connection) -> None:
         for name, ddl in _TASK_RUN_COLUMNS:
             if name not in run_cols:
                 _add_column_if_missing(conn, "task_runs", name, ddl)
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_runs_worker_session "
+                     "ON task_runs(worker_session_id) WHERE worker_session_id IS NOT NULL")
         _backfill_legacy_inflight_runs(conn)
 
     # One-shot event-kind rename: old names still worked but were awkward on
@@ -1084,10 +1087,11 @@ _REBUILD_SPECS = {
         " worker_pid INTEGER, worker_started_at INTEGER, max_runtime_seconds INTEGER,"
         " last_heartbeat_at INTEGER, started_at INTEGER NOT NULL,"
         " ended_at INTEGER, outcome TEXT, summary TEXT, metadata TEXT,"
-        " error TEXT)",
+        " error TEXT, worker_session_id TEXT)",
         (
             "CREATE INDEX idx_runs_task ON task_runs(task_id, started_at)",
             "CREATE INDEX idx_runs_status ON task_runs(status)",
+            "CREATE UNIQUE INDEX idx_runs_worker_session ON task_runs(worker_session_id) WHERE worker_session_id IS NOT NULL",
         ),
     ),
     "kanban_notify_subs": (

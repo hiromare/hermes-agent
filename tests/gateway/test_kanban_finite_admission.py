@@ -129,6 +129,12 @@ def test_durable_kanban_admission_preserves_headless_policy_in_worker(kanban_own
             retry = await run_task(owner.connection, owner.params)
             assert retry == first
             sid = first['session_id']
+            from hermes_cli import kanban_db as kb
+            from hermes_cli.kanban_db_connect import connect
+            with closing(connect(board='owned')) as conn:
+                run = kb.get_run(conn, owner.params['run_id'])
+                assert run.worker_session_id == sid
+                assert run.task_id == owner.params['task_id']
             rows = list_session_admissions(authority.db, session_id=sid)
             assert len(rows) == 1
             policy = policy_for_source(owner.runner, authority.sessions[sid].source)
@@ -146,6 +152,75 @@ def test_durable_kanban_admission_preserves_headless_policy_in_worker(kanban_own
             await owner.close()
 
     asyncio.run(scenario())
+
+
+def test_admitted_run_cannot_be_relinked_to_another_session(kanban_owner):
+    from gateway.session_kanban import run_task
+    from hermes_cli.kanban_db_connect import connect
+    from hermes_state_runtime import RuntimeStoreError
+
+    owner = kanban_owner(_CONFIG)
+
+    async def scenario():
+        try:
+            admitted = await run_task(owner.connection, owner.params)
+            with closing(connect(board='owned')) as conn:
+                conn.execute('UPDATE task_runs SET worker_session_id=? WHERE id=?',
+                             ('other-session', owner.params['run_id']))
+            with pytest.raises(RuntimeStoreError, match='stale_kanban_claim'):
+                await run_task(owner.connection, owner.params)
+            with closing(connect(board='owned')) as conn:
+                row = conn.execute('SELECT worker_session_id FROM task_runs WHERE id=?',
+                                   (owner.params['run_id'],)).fetchone()
+                assert row[0] == 'other-session'
+            assert admitted['session_id'] != row[0]
+        finally:
+            await owner.close()
+
+    asyncio.run(scenario())
+
+
+def test_admitted_retry_after_claim_is_cleared(kanban_owner):
+    from gateway.session_kanban import run_task
+    from hermes_cli.kanban_db_connect import connect
+
+    owner = kanban_owner(_CONFIG)
+
+    async def scenario():
+        try:
+            first = await run_task(owner.connection, owner.params)
+            with closing(connect(board='owned')) as conn:
+                conn.execute('UPDATE task_runs SET claim_lock=NULL WHERE id=?', (owner.params['run_id'],))
+            assert await run_task(owner.connection, owner.params) == first
+        finally:
+            await owner.close()
+
+    asyncio.run(scenario())
+
+
+def test_duplicate_session_link_is_rejected(kanban_owner):
+    from gateway.session_kanban import run_task
+    from hermes_cli import kanban_db as kb
+    from hermes_cli.kanban_db_connect import connect
+    owner = kanban_owner(_CONFIG)
+
+    async def scenario():
+        try:
+            first = await run_task(owner.connection, owner.params)
+            with closing(connect(board='owned')) as conn:
+                other_id = kb.create_task(conn, title='Other', assignee='default',
+                                          workspace_kind='dir', workspace_path=owner.authority.profile_id)
+                kb.recompute_ready(conn)
+                other = kb.claim_task(conn, other_id)
+                conn.execute('UPDATE task_runs SET worker_session_id=? WHERE id=?',
+                             (first['session_id'], other.current_run_id))
+        finally:
+            await owner.close()
+
+    # The database itself rejects a duplicate, even if callers bypass the owner.
+    import sqlite3
+    with pytest.raises(sqlite3.IntegrityError):
+        asyncio.run(scenario())
 
 
 def test_retry_of_pre_finite_kanban_admission_returns_original_receipt(kanban_owner, monkeypatch):
