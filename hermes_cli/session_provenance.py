@@ -1,15 +1,21 @@
 """Public, narrowly projected provenance from the durable local creation receipt."""
 import json
 
-from hermes_state_local import POLICY_PREFIX
+from hermes_state_local import local_receipt
+from hermes_state_runtime import RuntimeStoreError
 
 
 def session_provenance(db, session_id):
-    row = db._read_one('SELECT value FROM state_meta WHERE key=?', (POLICY_PREFIX + session_id,))
-    if not row:
-        return None
+    # Reuse the gateway owner's established reader, not its private state_meta
+    # layout or the SessionDB's private SQL API. A missing/invalid receipt is
+    # not authoritative evidence of a worker.
     try:
-        receipt = json.loads(row[0])
+        receipt = local_receipt(db, session_id)
+    except RuntimeStoreError as exc:
+        if exc.reason == 'storage_unavailable':
+            return None
+        raise
+    try:
         policy = receipt['policy']
         request = json.loads(policy['request_json'])
         if receipt['session_id'] != session_id or policy['source'] != 'kanban' or request['source'] != 'kanban':
