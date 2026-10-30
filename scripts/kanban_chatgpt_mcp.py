@@ -6,13 +6,13 @@ from typing import Annotated
 from urllib.error import HTTPError, URLError
 from uuid import UUID
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
 from kanban_delegate_client import _safe_base, call
 
-mcp = FastMCP(
+mcp = MCPServer(
     "Hermes delegated Kanban",
     instructions=(
         "Submit only work explicitly requested by the user. Retain board, request_id "
