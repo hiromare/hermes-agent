@@ -12,10 +12,22 @@ import sys
 import uuid
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode, urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
+
+
+class _NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def urlopen(request, timeout):
+    # Session credentials must never follow a server-controlled redirect.
+    return build_opener(_NoRedirect()).open(request, timeout=timeout)
 
 
 def _safe_base(value):
+    if any(ord(char) <= 32 or ord(char) == 127 or char == "\\" for char in value):
+        raise ValueError("invalid base URL")
     parsed = urlsplit(value)
     if (
         parsed.scheme not in ("http", "https")
