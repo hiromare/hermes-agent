@@ -28,8 +28,8 @@ def test_protocol_metadata_and_malicious_base(monkeypatch):
         tools = {tool.name: tool for tool in (await session.list_tools()).tools}
         assert set(tools) == {"submit_delegation", "get_delegation_status"}
         submit, status = tools["submit_delegation"], tools["get_delegation_status"]
-        assert submit.annotations.idempotentHint and not submit.annotations.readOnlyHint
-        assert status.annotations.readOnlyHint
+        assert submit.annotations.idempotent_hint and not submit.annotations.read_only_hint
+        assert status.annotations.read_only_hint
         assert {"board", "request_id", "title"} <= set(submit.inputSchema["required"])
         assert "base_url" not in submit.inputSchema["properties"]
         invalid = await session.call_tool("submit_delegation", {"board": "default", "title": "Task"})
