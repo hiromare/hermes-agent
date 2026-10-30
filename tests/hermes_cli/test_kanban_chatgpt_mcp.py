@@ -33,9 +33,9 @@ def test_protocol_metadata_and_malicious_base(monkeypatch):
         assert {"board", "request_id", "title"} <= set(submit.input_schema["required"])
         assert "base_url" not in submit.input_schema["properties"]
         invalid = await session.call_tool("submit_delegation", {"board": "default", "title": "Task"})
-        assert invalid.isError
+        assert invalid.is_error
         invalid = await session.call_tool("submit_delegation", {"board": "default", "request_id": "123e4567-e89b-12d3-a456-426614174000", "title": "x" * 501})
-        assert invalid.isError
+        assert invalid.is_error
         return await session.call_tool("get_delegation_status", {"board": "default", "request_id": "123e4567-e89b-12d3-a456-426614174000"})
     result = anyio.run(_session, {"HERMES_BASE_URL": "http://evil.example", "HERMES_SESSION_TOKEN": "private-token"}, exercise)
     assert "request failed" in str(result)
