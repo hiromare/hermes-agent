@@ -761,6 +761,12 @@ async def _admit_run_to_authority(
 
 
 async def _handle_runs(self, request: web.Request, *, _api_server) -> web.Response:
+    from gateway.platforms.api_server_linked_child import route
+    return await route(self, request,
+                       lambda value: _handle_runs_standard(self, value, _api_server=_api_server))
+
+
+async def _handle_runs_standard(self, request: web.Request, *, _api_server) -> web.Response:
     """POST /v1/runs — start an agent run, return run_id immediately."""
     _openai_error = _api_server._openai_error
     # Long-term memory scope header (see chat_completions for details).
@@ -1245,7 +1251,10 @@ async def _handle_get_run(self, request: web.Request, *, _api_server) -> web.Res
     """GET /v1/runs/{run_id} — return pollable run status for external UIs."""
     _, status, _, _, err = _load_owned_run(
         self, request, _api_server=_api_server, permission="status", active_fallback=True)
-    return err or web.json_response(status)
+    if err is not None:
+        return err
+    from gateway.platforms.api_server_linked_child import project
+    return web.json_response(project(self, request.match_info["run_id"], status))
 
 
 async def _handle_run_events(self, request: web.Request, *, _api_server) -> web.StreamResponse:
