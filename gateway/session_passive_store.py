@@ -200,4 +200,4 @@ class PassiveHistory:
             self._check(conn, body)
             conn.execute('DELETE FROM state_meta WHERE key=?', (self._attachment_key(body['tab_id']),))
         self.db._execute_write(write)
-        return {'profile': self.profile, 'status': 'detached'}
+        return {'status': 'detached'}

@@ -124,6 +124,8 @@ def project(adapter, run_id, status):
 
 async def dispatch(adapter, request, body, next_handler):
     from aiohttp import web
+    from hermes_state_errors import SessionTurnLeaseLostError
+    from hermes_state import SessionCompressionInProgressError
     from gateway.session_authorities import active_authority
     from gateway.platforms.api_server import _api_request_profile
     refused = adapter._check_auth(request)
@@ -148,6 +150,8 @@ async def dispatch(adapter, request, body, next_handler):
             return web.json_response({**result, **{k: prepared[k] for k in
                 ('session_id', 'child_session_id', 'parent_message_id')}}, status=202)
         return response
+    except (SessionTurnLeaseLostError, SessionCompressionInProgressError):
+        return web.json_response({'error': 'busy', 'retryable': True}, status=409)
     except RuntimeStoreError as exc:
         return web.json_response({'error': exc.reason, 'retryable': exc.reason == 'busy'}, status=409)
 

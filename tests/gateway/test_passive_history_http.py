@@ -61,6 +61,9 @@ async def test_http_authentication_and_retry_preserve_exact_existing_chat(tmp_pa
                                   json={**payload, 'session_id': 'missing-chat'})
         assert other.status == 409
         assert len(db.get_messages('existing-chat')) == 1
+        detached = await client.post('/v1/passive-history/detach', headers=headers, json=fields)
+        assert detached.status == 200
+        assert await detached.json() == {'status': 'detached'}
     finally:
         await client.close()
         await adapter.disconnect()
